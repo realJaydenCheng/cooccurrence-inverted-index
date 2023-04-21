@@ -19,7 +19,7 @@ class NetworkConstructor(abc.ABC):
     ):
         self.client = client
         self.index = index
-        self.field = field,
+        self.field = field
         self.nodes: dict[str, int] = defaultdict(int)
         self.edges: dict[frozenset[str], int] = defaultdict(int)
 
@@ -32,20 +32,19 @@ class IterConstructor(NetworkConstructor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @functools.wraps(NetworkConstructor.get_network)
     def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
         # 在es中搜索符合条件的文档，并得到每个文档的内容
         response = self.client.search(
             index=self.index, query=query, size=10000
         )
-        titles = [doc['_source'][self.field] for doc in response['hits']['hits']]
+        contents = [doc['_source'][self.field] for doc in response['hits']['hits']]
 
         # 遍历文档构建共现矩阵
         co_occurrence_matrix: dict[frozenset[str], int] = defaultdict(int)
-        for title in titles:
-            # 使用 _analyze API 对标题进行分词
+        for content in contents:
+            # 使用 _analyze API 对文档进行分词
             analyze_response = self.client.indices.analyze(
-                text=title, analyzer=DEFAULT_ANALYZER,
+                text=content, analyzer=DEFAULT_ANALYZER,
             )
             tokens = [token_info['token'] for token_info in analyze_response['tokens']]
             for token1, token2 in combinations(tokens, 2):
@@ -137,7 +136,6 @@ class RecursionConstructor(NetworkConstructor):
             if bucket["doc_count"] > self.edges[edge]:
                 self.edges[edge] = bucket["doc_count"]
 
-    @functools.wraps(NetworkConstructor.get_network)
     def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
         response = self.client.search(
             index=self.index, query=query, aggs=self.agg, size=0
