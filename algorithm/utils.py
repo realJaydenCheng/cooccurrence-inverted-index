@@ -22,8 +22,8 @@ DEFAULT_AGG = {
     DEFAULT_AGG_NAME: {
         "terms": {
             "field": DEFAULT_FIELD,
-        }
-    }
+        },
+    },
 }
 
 DEFAULT_DEPTH = 5

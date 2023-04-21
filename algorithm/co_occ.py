@@ -65,9 +65,9 @@ class IterConstructor(NetworkConstructor):
 
 def _extract_word_buckets(
         es_response: dict,
-        agg: str = DEFAULT_AGG_NAME,
+        agg_name: str = DEFAULT_AGG_NAME,
 ) -> list[dict]:
-    return es_response['aggregations'][agg]['buckets']
+    return es_response['aggregations'][agg_name]['buckets']
 
 
 def _construct_query(
@@ -104,7 +104,6 @@ class RecursionConstructor(NetworkConstructor):
         super().__init__(*args, **kwargs)
         self.agg = agg
         self.agg_name = agg_name
-        super().__init__(*args, **kwargs)
         self.depth = depth
 
     def _get_words(
@@ -127,18 +126,22 @@ class RecursionConstructor(NetworkConstructor):
         response = self.client.search(
             index=self.index, query=query, aggs=agg, size=0
         )
+        word = " ".join(target_words)
 
         # 递归构造共现网络
-        for bucket in _extract_word_buckets(response, agg=agg_name):
+        for bucket in _extract_word_buckets(response, agg_name):
             self._get_words(base_query, [bucket['key']], depth-1, agg, agg_name)
             self.nodes[bucket["key"]] += bucket["doc_count"]
-            edge = frozenset((bucket["key"], " ".join(target_words)))
+            if bucket['key'] == word:
+                continue
+            edge = frozenset((bucket["key"], word))
             if bucket["doc_count"] > self.edges[edge]:
                 self.edges[edge] = bucket["doc_count"]
 
     def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
+        print(self.agg)
         response = self.client.search(
-            index=self.index, query=query, aggs=self.agg, size=0
+            index=self.index, query=query, aggs=self.agg, size=0,
         )
         top_words = [
             bucket["key"] for bucket
@@ -146,4 +149,60 @@ class RecursionConstructor(NetworkConstructor):
         ]
         for word in top_words:
             self._get_words(query, [word], self.depth, self.agg, self.agg_name)
+        return self.nodes, self.edges
+
+
+class BFSConstructor(NetworkConstructor):
+    @functools.wraps(NetworkConstructor.__init__)
+    def __init__(self,
+                 agg: dict = DEFAULT_AGG,
+                 agg_name: str = DEFAULT_AGG_NAME,
+                 depth: int = DEFAULT_DEPTH,
+                 *args, **kwargs
+                 ):
+        super().__init__(*args, **kwargs)
+        self.agg = agg
+        self.agg_name = agg_name
+        self.depth = depth
+
+    def _get_words_bfs(
+            self,
+            base_query: dict,
+            seed_words: Sequence[str],
+            depth: int = DEFAULT_DEPTH,
+            agg: dict = DEFAULT_AGG,
+            agg_name: str = DEFAULT_AGG_NAME,
+    ) -> None:
+        """bfs
+        这个 seed words 与前面的 target words 不一样，这里是在函数内遍历，前面的是在函数外遍历。
+        """
+        words = seed_words
+        for _ in range(depth):
+            for word in words:
+                _query = _construct_query(base_query, [word])
+                response = self.client.search(
+                    index=self.index, size=0, aggs=agg, query=_query,
+                )
+                word_buckets = _extract_word_buckets(response, agg_name)
+                _words = []
+                for bucket in word_buckets:
+                    node = str(bucket["key"])
+                    cnt = int(bucket["doc_count"])
+                    self.nodes[node] = cnt
+                    edge = frozenset((node, word))
+                    if node == word:
+                        continue
+                    self.edges[edge] = cnt
+                    _words.append(node)
+                words = _words
+
+    def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
+        response = self.client.search(
+            index=self.index, query=query, aggs=self.agg, size=0,
+        )
+        top_words = [
+            bucket["key"] for bucket
+            in _extract_word_buckets(response)
+        ]
+        self._get_words_bfs(query, top_words, self.depth, self.agg, self.agg_name)
         return self.nodes, self.edges
