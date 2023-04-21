@@ -3,39 +3,31 @@ from typing import Iterable, Optional
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 
+from .utils import *
+
 
 class InvertedIndex:
     def __init__(self, client: Elasticsearch):
         self.client = client
-        self.index: str = "co_occ_test"
-        self.property: Optional[str] = None
+        self.index: str = DEFAULT_INDEX
+        self.field: Optional[str] = None
 
     def __repr__(self) -> str:
         return f"Invert Index Instance {id(self):x} {self.client} {self.index}"
 
-    _default_mapping = {
-        "properties": {
-            "content": {
-                "type": "text",
-                "analyzer": "ik_smart",
-            }
-        }
-    }
-
     def set_index(
             self,
-            name: str = "co_occ_test",
-            property_: str = "content",
+            name: str = DEFAULT_INDEX,
+            field: str = DEFAULT_FIELD,
             mappings=None,
     ):
         report = None
         if mappings is None:
-            mappings = InvertedIndex._default_mapping
             report = self.client.indices.create(
-                index=name, mappings=mappings
+                index=name, mappings=DEFAULT_MAPPING
             )
         self.index = name
-        self.property = property_
+        self.field = field
         return report
 
     def _bulk_active(self, data: Iterable):
@@ -43,7 +35,7 @@ class InvertedIndex:
             doc = {
                 "_index": self.index,
                 "_source": {
-                    self.property: str(content)
+                    self.field: str(content)
                 },
             }
             yield doc
@@ -55,7 +47,7 @@ class InvertedIndex:
         report = bulk(
             self.client,
             self._bulk_active(data),
-            raise_on_error = False,
+            raise_on_error=False,
         )
         return report
 
