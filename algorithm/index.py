@@ -54,5 +54,4 @@ class InvertedIndex:
     def delete_index_and_data(self):
         report = self.client.indices.delete(index=self.index)
         self.index = None
-        self.client = None
         return report
