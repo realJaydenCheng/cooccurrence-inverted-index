@@ -2,13 +2,29 @@ DEFAULT_INDEX = "co_occ_test"
 
 DEFAULT_FIELD = "content"
 
+DEFAULT_ANALYZER = "ik_smart"
+
+DEFAULT_TYPE = "text"
+
 DEFAULT_MAPPING = {
     "properties": {
         DEFAULT_FIELD: {
-            "type": "text",
-            "analyzer": "ik_smart",
+            "type": DEFAULT_TYPE,
+            "analyzer": DEFAULT_ANALYZER,
+            "fielddata": True,
         }
     }
 }
 
-DEFAULT_ANALYZER = "ik_smart"
+DEFAULT_AGG_NAME = "word_count"
+
+DEFAULT_AGG = {
+    DEFAULT_AGG_NAME: {
+        "terms": {
+            "field": DEFAULT_FIELD,
+        }
+    }
+}
+
+DEFAULT_DEPTH = 5
+
