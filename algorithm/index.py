@@ -7,6 +7,26 @@ from .utils import *
 
 
 class InvertedIndex:
+    """基于Elasticsearch的倒排索引
+
+    Attributes
+    ----------
+    client: Elasticsearch
+        Elasticsearch客户端实例。
+    index: str
+        在Elasticsearch中具体的索引名称。
+    field: str
+        在索引中用于分析的字段名称。
+
+    Methods
+    -------
+    set_index(name: str = DEFAULT_INDEX, field: str = DEFAULT_FIELD, mappings=None):
+        设置类的属性。
+    index_data(data: Iterable[str]):
+        将数据填充到类属性中。
+    delete_index_and_data():
+        删除类属性中的数据。
+    """
     def __init__(self, client: Elasticsearch):
         self.client = client
         self.index: str = DEFAULT_INDEX

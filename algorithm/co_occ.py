@@ -139,7 +139,6 @@ class RecursionConstructor(NetworkConstructor):
                 self.edges[edge] = bucket["doc_count"]
 
     def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
-        print(self.agg)
         response = self.client.search(
             index=self.index, query=query, aggs=self.agg, size=0,
         )
