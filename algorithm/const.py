@@ -6,6 +6,8 @@ DEFAULT_ANALYZER = "ik_smart"
 
 DEFAULT_TYPE = "text"
 
+DEFAULT_AGG_NAME = "word_count"
+
 DEFAULT_MAPPING = {
     "properties": {
         DEFAULT_FIELD: {
@@ -16,8 +18,6 @@ DEFAULT_MAPPING = {
     }
 }
 
-DEFAULT_AGG_NAME = "word_count"
-
 DEFAULT_AGG = {
     DEFAULT_AGG_NAME: {
         "terms": {
@@ -27,4 +27,3 @@ DEFAULT_AGG = {
 }
 
 DEFAULT_DEPTH = 5
-
