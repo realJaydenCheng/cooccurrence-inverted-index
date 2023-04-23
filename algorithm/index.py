@@ -3,7 +3,7 @@ from typing import Iterable, Optional
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 
-from .utils import *
+from .const import *
 
 
 class InvertedIndex:

@@ -7,10 +7,19 @@ from typing import Sequence
 
 from elasticsearch import Elasticsearch
 
-from .utils import *
+from .const import *
 
 
-class NetworkConstructor(abc.ABC):
+class CoNetwork:
+    def __init__(self) -> None:
+        self.nodes: dict[str, int] = defaultdict(int)
+        self.edges: dict[frozenset[str], int] = defaultdict(int)
+
+    def __repr__(self) -> str:
+        return f"nodes: {len(self.nodes)}, edges: {len(self.edges)}"
+
+
+class _NetworkConstructor(abc.ABC):
     def __init__(
             self,
             client: Elasticsearch,
@@ -20,19 +29,22 @@ class NetworkConstructor(abc.ABC):
         self.client = client
         self.index = index
         self.field = field
-        self.nodes: dict[str, int] = defaultdict(int)
-        self.edges: dict[frozenset[str], int] = defaultdict(int)
+        self._network = CoNetwork()
+
+    def __repr__(self) -> str:
+        return f"0x{id(self):X} {self.index} {self.field}"
 
     @abc.abstractmethod
-    def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]: ...
+    def get_network(self, query: dict) -> CoNetwork: ...
 
 
-class IterConstructor(NetworkConstructor):
-    @functools.wraps(NetworkConstructor.__init__)
+class IterConstructor(_NetworkConstructor):
+    @functools.wraps(_NetworkConstructor.__init__)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
+    def get_network(self, query: dict) -> CoNetwork:
+        self._network = CoNetwork()
         # 在es中搜索符合条件的文档，并得到每个文档的内容
         response = self.client.search(
             index=self.index, query=query, size=10000
@@ -52,15 +64,15 @@ class IterConstructor(NetworkConstructor):
                     continue
                 # 逐个计数
                 co_occurrence_matrix[frozenset((token1, token2))] += 1
-                self.nodes[token1] += 1
-                self.nodes[token2] += 1
+                self._network.nodes[token1] += 1
+                self._network.nodes[token2] += 1
 
         # 构建返回值
         for token_pair, count in co_occurrence_matrix.items():
             edge = frozenset(token_pair)
-            self.edges[edge] = count
+            self._network.edges[edge] = count
 
-        return self.nodes, self.edges
+        return self._network
 
 
 def _extract_word_buckets(
@@ -93,8 +105,8 @@ def _construct_query(
     return query
 
 
-class RecursionConstructor(NetworkConstructor):
-    @functools.wraps(NetworkConstructor.__init__)
+class RecursionConstructor(_NetworkConstructor):
+    @functools.wraps(_NetworkConstructor.__init__)
     def __init__(self,
                  agg: dict = DEFAULT_AGG,
                  agg_name: str = DEFAULT_AGG_NAME,
@@ -114,7 +126,7 @@ class RecursionConstructor(NetworkConstructor):
             agg: dict = DEFAULT_AGG,
             agg_name: str = DEFAULT_AGG_NAME,
     ) -> None:
-        """递归构造词共现网络，结果存储至self.nodes与self.edges中。
+        """递归构造词共现网络，结果存储至self._network中。
 
         """
         # 结束递归
@@ -130,15 +142,16 @@ class RecursionConstructor(NetworkConstructor):
 
         # 递归构造共现网络
         for bucket in _extract_word_buckets(response, agg_name):
-            self._get_words(base_query, [bucket['key']], depth-1, agg, agg_name)
-            self.nodes[bucket["key"]] += bucket["doc_count"]
+            self._get_words(base_query, [bucket['key']], depth - 1, agg, agg_name)
+            self._network.nodes[bucket["key"]] += bucket["doc_count"]
             if bucket['key'] == word:
                 continue
             edge = frozenset((bucket["key"], word))
-            if bucket["doc_count"] > self.edges[edge]:
-                self.edges[edge] = bucket["doc_count"]
+            if bucket["doc_count"] > self._network.edges[edge]:
+                self._network.edges[edge] = bucket["doc_count"]
 
-    def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
+    def get_network(self, query: dict) -> CoNetwork:
+        self._network = CoNetwork()
         response = self.client.search(
             index=self.index, query=query, aggs=self.agg, size=0,
         )
@@ -148,11 +161,11 @@ class RecursionConstructor(NetworkConstructor):
         ]
         for word in top_words:
             self._get_words(query, [word], self.depth, self.agg, self.agg_name)
-        return self.nodes, self.edges
+        return self._network
 
 
-class BFSConstructor(NetworkConstructor):
-    @functools.wraps(NetworkConstructor.__init__)
+class BFSConstructor(_NetworkConstructor):
+    @functools.wraps(_NetworkConstructor.__init__)
     def __init__(self,
                  agg: dict = DEFAULT_AGG,
                  agg_name: str = DEFAULT_AGG_NAME,
@@ -187,15 +200,16 @@ class BFSConstructor(NetworkConstructor):
                 for bucket in word_buckets:
                     node = str(bucket["key"])
                     cnt = int(bucket["doc_count"])
-                    self.nodes[node] = cnt
+                    self._network.nodes[node] = cnt
                     edge = frozenset((node, word))
                     if node == word:
                         continue
-                    self.edges[edge] = cnt
+                    self._network.edges[edge] = cnt
                     _words.append(node)
                 words = _words
 
-    def get_network(self, query: dict) -> tuple[dict[str, int], dict[frozenset[str], int]]:
+    def get_network(self, query: dict) -> CoNetwork:
+        self._network = CoNetwork()
         response = self.client.search(
             index=self.index, query=query, aggs=self.agg, size=0,
         )
@@ -204,4 +218,4 @@ class BFSConstructor(NetworkConstructor):
             in _extract_word_buckets(response)
         ]
         self._get_words_bfs(query, top_words, self.depth, self.agg, self.agg_name)
-        return self.nodes, self.edges
+        return self._network
