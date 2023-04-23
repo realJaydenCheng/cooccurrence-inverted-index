@@ -10,6 +10,9 @@ class _NetworkAdapter(abc.ABC):
     def __init__(self, network: CoNetwork):
         self._network = network
 
+    def __repr__(self) -> str:
+        return f"Adapter at 0x{id(self):X}, network {self._network.__repr__()}"
+
     @abc.abstractmethod  # property
     def nodes(self): ...
 
